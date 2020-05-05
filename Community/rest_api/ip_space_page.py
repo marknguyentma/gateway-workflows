@@ -87,6 +87,16 @@ ip4_address_post_model = api.model(
     },
 )
 
+ip4_address_patch_model = api.model(
+    'ip4_address_patch',
+    {
+        'mac_address':  fields.String(description='MAC Address value'),
+        'action':  fields.String(
+            description='Desired IP4 address state: MAKE_STATIC / MAKE_RESERVED / MAKE_DHCP_RESERVED'
+        ),
+        'properties': fields.String(description='The properties of the IP4 Address', default='attribute=value|'),
+    },
+)
 
 network_patch_model = api.model(
     'ipv4_networks_patch',
@@ -134,6 +144,11 @@ linked_root_ns = api.namespace(
     path='/linked/',
     description='Linkeds operations',
 )
+
+ip4_address_patch_parser = reqparse.RequestParser()
+ip4_address_patch_parser.add_argument('mac_address', location="json", help='The MAC address')
+ip4_address_patch_parser.add_argument('action', location="json", help='The action for address assignment')
+ip4_address_patch_parser.add_argument('properties', location="json", help='The properties of the record')
 
 @ip4_address_ns.route('/ipv4_networks/<string:network>/get_next_ip/')
 @ip4_address_default_ns.route('/ipv4_networks/<string:network>/get_next_ip/', defaults=config_defaults)
@@ -234,7 +249,30 @@ class IPv4Address(Resource):
             configuration = g.user.get_api().get_configuration(configuration)
             address = configuration.get_ip4_address(ipv4_address)
             address.delete()
-            return '', 204
+            return 'Delete successfully.', 204
+        except Exception as e:
+            return str(e), 500
+    
+    @util.rest_workflow_permission_required('rest_page')
+    @ip4_network_ns.expect(ip4_address_patch_model, validate=True)
+    def patch(self, configuration, ipv4_address):
+        """
+        Update IPv4 Address.
+        """
+        try:
+            data = ip4_address_patch_parser.parse_args()
+            configuration = g.user.get_api().get_configuration(configuration)
+            address = configuration.get_ip4_address(ipv4_address)
+            if data['mac_address'] is not None:
+                address.set_property('macAddress', data['mac_address'])
+            if data['action'] is not None:
+                address.change_state_ip4_address(data['action'], data['mac_address'])
+            if data['properties'] is not None:
+                properties = data.get('properties')
+                address.set_properties(util.properties_to_map(properties))
+            address.update()
+            result = address.to_json()
+            return jsonify(result)
         except Exception as e:
             return str(e), 500
 
