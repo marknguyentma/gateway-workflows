@@ -71,10 +71,10 @@ ip4_network_config_block_ns = api.namespace(
     description='IPv4 Network operations',
 )
 
-ip4_network_group_ns = api.namespace('ipv4_networks', path='/tag_group/<int:tag_group>/', description='IPv4 Network operations')
+ip4_network_group_ns = api.namespace('ipv4_networks', path='/tag_group/<string:tag_group>/', description='IPv4 Network operations')
 ip4_network_config_group_ns = api.namespace(
     'ipv4_networks',
-    path='/configurations/<string:configuration>/tag_group/<int:tag_group>/',
+    path='/configurations/<string:configuration>/tag_group/<string:tag_group>/',
     description='IPv4 Network operations',
 )
 
@@ -435,7 +435,7 @@ class IPv4Network(Resource):
         result = network_range.to_json()
         return jsonify(result)
 
-@ip4_network_config_group_ns.route('/tags/<string:tag>/ipv4_networks/', defaults={'configuration': None})
+@ip4_network_config_group_ns.route('/tags/<string:tag>/ipv4_networks/')
 @ip4_network_group_ns.route('/tags/<string:tag>/ipv4_networks/', defaults=config_defaults)
 class LinkedIPv4NetWork(Resource):
 
@@ -446,17 +446,17 @@ class LinkedIPv4NetWork(Resource):
         """
         try: 
             results = []
-            tag_group = g.user.get_api().get_entity_by_id(tag_group)
-            tags = tag_group.get_children_of_type(tag_group.Tag)
-            for ent_tag in tags:
-                if(ent_tag.get_name() == tag):
-                    networks = ent_tag.get_linked_entities(ent_tag.IP4Network)
-                    for network in networks:
-                        if configuration is not None:
+            tags = g.user.get_api().get_by_object_types(tag, 'Tag')
+            for val in tags:
+                if val.get_parent().name == tag_group:
+                    networks = val.get_linked_entities(val.IP4Network)
+                    if configuration != '':
+                        for network in networks:
                             config_of_network = network.get_parent_configuration()
                             if config_of_network.get_name() == configuration:
                                 results.append(network.to_json())
-                        else:
+                    else:
+                        for network in networks:
                             results.append(network.to_json())
             if len(results) == 0:
                 return 'IPv4 Network in tag not found', 404
