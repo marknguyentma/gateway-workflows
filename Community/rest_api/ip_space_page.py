@@ -71,6 +71,12 @@ ip4_network_config_block_ns = api.namespace(
     description='IPv4 Network operations',
 )
 
+ip4_network_group_ns = api.namespace('ipv4_networks', path='/tag_group/<int:tag_group>/', description='IPv4 Network operations')
+ip4_network_config_group_ns = api.namespace(
+    'ipv4_networks',
+    path='/configurations/<string:configuration>/tag_group/<int:tag_group>/',
+    description='IPv4 Network operations',
+)
 
 ip4_address_post_model = api.model(
     'ip4_address_post',
@@ -429,23 +435,31 @@ class IPv4Network(Resource):
         result = network_range.to_json()
         return jsonify(result)
 
-@linked_root_ns.route('/<int:tag_id>')
+@ip4_network_config_group_ns.route('/tags/<string:tag>/ipv4_networks/', defaults={'configuration': None})
+@ip4_network_group_ns.route('/tags/<string:tag>/ipv4_networks/', defaults=config_defaults)
 class LinkedIPv4NetWork(Resource):
 
     @util.rest_workflow_permission_required('rest_page')
-    @linked_root_ns.response(200, 'IPv4 Network found.', model=entity_return_model)
-    def get(self, tag_id):
+    def get(self, configuration, tag_group, tag):
         """
         Get IPv4 Network linked with tags.
         """
         try: 
             results = []
-            tag = g.user.get_api().get_entity_by_id(tag_id)
-            networks = tag.get_linked_entities(tag.IP4Network)
-            for network in networks:
-                results.append(network.to_json())
+            tag_group = g.user.get_api().get_entity_by_id(tag_group)
+            tags = tag_group.get_children_of_type(tag_group.Tag)
+            for ent_tag in tags:
+                if(ent_tag.get_name() == tag):
+                    networks = ent_tag.get_linked_entities(ent_tag.IP4Network)
+                    for network in networks:
+                        if configuration is not None:
+                            config_of_network = network.get_parent_configuration()
+                            if config_of_network.get_name() == configuration:
+                                results.append(network.to_json())
+                        else:
+                            results.append(network.to_json())
             if len(results) == 0:
-                return 'No IPv4 Network linked.', 404
+                return 'IPv4 Network in tag not found', 404
             return jsonify(results)
         except Exception as e:
             return str(e), 500
